@@ -9,11 +9,16 @@ import java.util.stream.Collectors;
 
 public class TheatreServiceImpl implements TheatreService {
 
+    LockService lockService;
+    int count=1;
+
+    public TheatreServiceImpl(LockService lockService) {
+        this.lockService = lockService;
+    }
+
     Theatre theatre;
     Map<Integer, Show> showMap = new HashMap<>();
-
-
-
+    Map<Integer, Booking> bookingMap = new HashMap<>();
 
     @Override
     public List<Show> getAllShow() {
@@ -21,26 +26,51 @@ public class TheatreServiceImpl implements TheatreService {
     }
 
     @Override
-    public void bookShow(BookingRequest bookingRequest) {
+    public List<Booking> getAllBooking() {
+        return bookingMap.values().stream().toList();
+    }
+
+    @Override
+    public Booking bookShow(BookingRequest bookingRequest) {
+//        System.out.println("Thread used in Book show is  = "+ Thread.currentThread().getId());
 
         System.out.println("Trying to book a showId = " + bookingRequest.getShowId() +
                 " seats = "+ bookingRequest.getSeats());
 
         Show show = showMap.get(bookingRequest.getShowId());
 
-        Screen screen = theatre.getScreenList().get(show.getScreenId()-1);
-
-        boolean conflict = bookingRequest.getSeats().stream().anyMatch(item -> screen.getBookedSeat().contains(item));
+        boolean conflict = bookingRequest.getSeats().stream().anyMatch(item -> show.getBookedSeat().contains(item));
 
         if (conflict) {
             throw new RuntimeException("Occupied seats can not be booked.");
         } else {
-            screen.getSeatList().removeAll(bookingRequest.getSeats());
-            screen.getBookedSeat().addAll(bookingRequest.getSeats());
+            // lock the seats for some time;
+
+            boolean lockFlag = lockService.lockSeats(bookingRequest.getSeats(), bookingRequest.getShowId(),
+                    bookingRequest.getUserId());
+
+            if (!lockFlag) {
+                System.out.println("Unable to lock for seats with booking request = "+ bookingRequest);
+                throw new RuntimeException("Unable to lock for seats with booking request = "+ bookingRequest);
+            }
+
+            show.getAvaiableSeats().removeAll(bookingRequest.getSeats());
+            show.getBookedSeat().addAll(bookingRequest.getSeats());
+
+            Booking booking = new Booking();
+            booking.setShowId(bookingRequest.getShowId());
+            booking.setStatus(Booking.Status.PENDING);
+            booking.setId(count++);
+            booking.setUserId(bookingRequest.getUserId());
+            booking.setSeats(bookingRequest.getSeats());
+
+            bookingMap.put(booking.getId(), booking);
+
+            return booking;
         }
 
-        System.out.println("Remaining avaiable seats are "+ screen.getSeatList()+" for screenId= "+screen.getId());
-        System.out.println("Booked seats are "+screen.getBookedSeat() +" for screenId= "+screen.getId());
+//        System.out.println("Remaining avaiable seats are "+ show.getAvaiableSeats()+" for screenId= "+show.getId());
+//        System.out.println("Booked seats are "+show.getBookedSeat() +" for screenId= "+show.getId());
 
     }
 
@@ -59,6 +89,8 @@ public class TheatreServiceImpl implements TheatreService {
         show1.setStartTime(LocalDateTime.now().plusMinutes(60));
         show1.setDuration(BigDecimal.valueOf(2));
         show1.setMovie(movie);
+        show1.setAvaiableSeats(screen1.getSeatList());
+
 
         Show show2 = new Show();
         show2.setId(2);
@@ -66,6 +98,7 @@ public class TheatreServiceImpl implements TheatreService {
         show2.setStartTime(LocalDateTime.now().plusMinutes(60));
         show2.setDuration(BigDecimal.valueOf(2));
         show2.setMovie(movie);
+        show2.setAvaiableSeats(screen2.getSeatList());
 
         showMap.putIfAbsent(show1.getId(), show1);
         showMap.put(show2.getId(), show2);
@@ -76,7 +109,6 @@ public class TheatreServiceImpl implements TheatreService {
         Screen screen = new Screen();
         screen.setId(i);
         screen.setSeatList(getSeats());
-        screen.setBookedSeat(new HashSet<>());
         return screen;
     }
 

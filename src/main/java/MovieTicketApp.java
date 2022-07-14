@@ -1,6 +1,7 @@
 import models.BookingRequest;
 import models.Seat;
 import models.Show;
+import service.LockServiceImpl;
 import service.TheatreService;
 import service.TheatreServiceImpl;
 
@@ -11,7 +12,7 @@ public class MovieTicketApp {
     public static void main(String[] args) {
 
 
-        TheatreService theatreService = new TheatreServiceImpl();
+        TheatreService theatreService = new TheatreServiceImpl(new LockServiceImpl());
         theatreService.initialize();
 
         List<Show> showList = theatreService.getAllShow();
